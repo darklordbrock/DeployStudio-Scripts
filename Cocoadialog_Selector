@@ -1,0 +1,184 @@
+#!/bin/bash
+
+#####
+# Script designed by Ian Gunther 2013
+# While working at University of Wisconsin Milwaukee
+#
+# The goal of this script is to create an environment of easy to use, easy to follow
+# choose-your-own adventure style selection process to arrive at the correct workflow/imaging process.
+# It is designed to be partially automated in that the script detects what it can from the machine it's
+# imaging, and makes initial decisions on what should be done for the user before it arrives at
+# dialogue boxes for questions that must be answered to lead to the proper final workflow for the machine.
+# Ultimately this is designed with Desktop Support 245 techs in mind so they can perform duties
+# with minimal training on Macintosh units campus-wide.
+#
+# For Reference the symbol below means 'yields' in notation
+# ->
+#####
+
+#Key Workflow Variables
+DISPLAYERROR="BE081A10-D933-4974-B1CE-D5DCB645C344"
+NEVERBOOTED="67B4CC78-9D6A-4F90-A1CC-0996A53F34A7"
+NEVERBOOTEDIMPORT="0929E328-6BCD-45EA-A7B3-8D75536BB0E3"
+REIMAGEMIGRATION106="A3A8386D-8F62-4E90-9396-16C17C44205F"
+REIMAGEMIGRATION107="422F363A-FD75-488B-9A28-15EB14C31051"
+REIMAGEMIGRATION108="24EB4BB6-6C7D-4B34-9D78-8880BDDC085C"
+#REIMAGEMIGRATION109=
+REIMAGE106="E7448872-0461-48FA-B1B7-ED3529B3CBE1"
+REIMAGE107="F32A97C2-CA31-492E-88C7-A7C012056531"
+REIMAGE108="21133048-7710-4277-8FB0-63747CF96918"
+#REIMAGE109=
+OLDMACHINE="3048820E-BBFB-4F53-BB3F-CA7EFFCC10BA"
+
+
+# Array of machine models
+# mtnlion needs to be updated everytime Apple makes a new machine.
+declare -a snowleopard=("iMac4,1" "iMac4,2" "Macmini1,1" "MacBook1,1" "MacBookPro1,1" "MacBookPro1,2")
+declare -a lion=("iMac5,1" "iMac5,2" "iMac6,1" "iMac6,2" "Macmini2,1" "MacPro1,1" "MacPro2,1" "MacBook2,1" "MacBook3,1" "MacBook4,1" "MacBookAir1,1" "MacBookPro2,1" "MacBookPro2,2")
+declare -a mtnlion=("iMac7,1" "iMac8,1" "iMac9,1" "iMac10,1" "iMac11,1" "iMac11,2" "iMac11,3" "iMac12,1" "iMac12,2" "iMac13,1" "iMac13,2" "Macmini3,1" "Macmini4,1" "Macmini5,1" "Macmini5,2" "Macmini5,3" "Macmini6,1" "Macmini6,2" "MacPro3,1" "MacPro4,1" "MacPro5,1" "MacBook5,1" "MacBook5,2" "MacBook6,1" "MacBook7,1" "MacBookAir2,1" "MacBookAir3,1" "MacBookAir3,2" "MacBookAir4,1" "MacBookAir4,2" "MacBookAir5,1" "MacBookAir5,2" "MacBookPro3,1" "MacBookPro4,1" "MacBookPro5,1" "MacBookPro5,2" "MacBookPro5,3" "MacBookPro5,4" "MacBookPro5,5" "MacBookPro6,1" "MacBookPro6,2" "MacBookPro7,1" "MacBookPro8,1" "MacBookPro8,2" "MacBookPro8,3" "MacBookPro9,1" "MacBookPro9,2" "MacBookPro10,1" "MacBookPro10,2")
+
+# get machine model
+MACHINE_MODEL=`/usr/sbin/ioreg -c IOPlatformExpertDevice | grep "model" | awk -F\" '{ print $4 }'`
+
+# Declare what encryption is...
+ENCRYPTION=`diskutil cs list | grep -E "$EGREP_STRING\Encryption Type" | sed -e's/\|//' | awk '{print $3}'`
+
+# DS_INTERNAL_DRIVE variable declared so .applesetupdone check and encryption check can be performed
+DS_INTERNAL_DRIVE=`system_profiler SPSerialATADataType | awk -F': ' '/Mount Point/ { print $2}'|head -n1`
+
+# CD variable declared to denote location of CocoaDialog
+CD="/Applications/Utilities/CocoaDialog.app/Contents/MacOS/CocoaDialog"
+
+# Begin Automated-CocoaDialog Scripted Sequence
+# 1) Script checks for Encryption (If encrypted -> error)
+
+if [ "$ENCRYPTION" = "AES-XTS" ]; then
+  echo "Drive is encrypted"
+	echo "RuntimeSelectWorkflow: $DISPLAYERROR"
+else
+	echo "Drive is not encrypted"
+	DIR=`ls "$DS_INTERNAL_DRIVE/Users/" | grep -v Shared | grep -v .localized`
+	TEST=`for S in $DIR; do ls "$DS_INTERNAL_DRIVE/Users/$S"; done | grep .sparsebundle`	
+	if [ "$TEST" != "" ]; then
+		echo "Home Directory is encrypted"
+		echo "RuntimeSelectWorkflow: $DISPLAYERROR"
+	fi
+fi
+
+# 2) Script checks for New Machine (New Machine -> step 2a)
+
+# Check if .applesetupdone file exists. If it doesn't exist, runs the correct workflow for a New Machine. 
+# Allows for faster enrollment of new machines since it doesn't image.
+
+find "$DS_INTERNAL_DRIVE/var/db/.AppleSetupDone"
+if [ "$?" == "1" ]; then
+# 2a) Asks if user wants to import user account after .applesetupdone check
+	rv=`$CD yesno-msgbox --icon computer --text "Would you like to import a backup?" \
+	--informative-text "New Machine Detected."`
+	if [ "$rv" == "1" ]; then
+		echo "User Selected to Import on New Machine"
+		echo "RuntimeSelectWorkflow: " $NEVERBOOTEDIMPORT " "
+	elif [ "$rv" == "2" ]; then
+		echo "User Selected to Not Import on New Machine"
+		echo "RuntimeSelectWorkflow: " $NEVERBOOTED " "
+	elif [ "$rv" == "3" ]; then
+		echo "User Selected to Cancel"
+		exit 0
+	fi
+fi
+
+
+
+# 3) Asks if user wants to rebuild the machine (Yes -> step 3a; No -> step 4)
+
+rv=`$CD yesno-msgbox --icon gear --text "Would you like to rebuild (reimage) the machine?" \
+--informative-text "Inducts machine into JAMF."`
+if [ "$rv" == "1" ]; then
+echo "User Selected to Reimage"
+# 3a) Asks if user wants to migrate user data (Yes -> Reimage with Migration; No -> Reimage)
+	rv=`$CD yesno-msgbox --icon folder --text "Would you like to migrate the user's data?" \
+	--informative-text "Backs up data, then places it back on drive."`
+	if [ "$rv" == "1" ]; then
+		echo "User Selected to Reimage With Migrate"
+		#Using machine model variable, script decides highest compatible OS version for machine
+		for i in ${snowleopard[@]}; do
+		if [ "${MACHINE_MODEL}" == "$i" ]; then
+			echo "RuntimeSelectWorkflow: " $REIMAGEMIGRATION106 " "
+		fi
+		done
+
+		for i in ${lion[@]}; do
+		if [ "${MACHINE_MODEL}" == "$i" ]; then
+			echo "RuntimeSelectWorkflow: " $REIMAGEMIGRATION107 " "
+		fi
+		done
+
+		for i in ${mtnlion[@]}; do
+		if [ "${MACHINE_MODEL}" == "$i" ]; then
+			echo "RuntimeSelectWorkflow: " $REIMAGEMIGRATION108 " "
+		fi
+		done
+		
+	elif [ "$rv" == "2" ]; then
+		echo "User Selected to Reimage Without Migrate"
+		#Using machine model variable, script decides highest compatible OS version for machine
+		for i in ${snowleopard[@]}; do
+		if [ "${MACHINE_MODEL}" == "$i" ]; then
+			echo "RuntimeSelectWorkflow: " $REIMAGE106 " "
+		fi
+		done
+
+		for i in ${lion[@]}; do
+		if [ "${MACHINE_MODEL}" == "$i" ]; then
+			echo "RuntimeSelectWorkflow: " $REIMAGE107 " "
+		fi
+		done
+
+		for i in ${mtnlion[@]}; do
+		if [ "${MACHINE_MODEL}" == "$i" ]; then
+			echo "RuntimeSelectWorkflow: " $REIMAGE108 " "
+		fi
+		done
+		
+	elif [ "$rv" == "3" ]; then
+		echo "User Selected to Cancel"
+		exit 0
+	fi
+elif [ "$rv" == "2" ]; then
+	echo "User Selected to Not Rebuild"
+elif [ "$rv" == "3" ]; then
+	echo "User Selected to Cancel"
+	exit 0
+fi
+
+
+# 4) Asks if old machine needs to migrate to new machine (yes -> backup,prompt for backup check, dod wipe)
+
+rv=`$CD yesno-msgbox --icon hazard --text "Old Machine transfering to New Machine?" \
+--informative-text "Selecting Yes will backup and then erase the drive."`
+if [ "$rv" == "1" ]; then
+	echo "User Selected to Transfer from Old Machine"
+	echo "RuntimeSelectWorkflow: " $OLDMACHINE " "
+elif [ "$rv" == "2" ]; then
+	echo "User Selected to Not Transfer"
+elif [ "$rv" == "3" ]; then
+	echo "User Selected to Cancel"
+	exit 0
+fi
+
+
+# 5) Displays only if user selected No to final y/n dialog box.
+# (OK -> Cancel workflow, go back to deploystudio to try again)
+
+rv=`$CD ok-msgbox --icon info --text "One does not simply bin/bash into Mordor." \
+--informative-text "There is evil there that does not sleep." \
+--no-newline --float`
+if [ "$rv" == "1" ]; then
+	echo "User said OK"
+	exit 0
+elif [ "$rv" == "2" ]; then
+	echo "Canceling"
+	exit 0
+fi
+
+exit 0
