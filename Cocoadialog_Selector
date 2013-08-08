@@ -4,6 +4,10 @@
 # Script designed by Ian Gunther 2013
 # While working at University of Wisconsin Milwaukee
 #
+# Script is based off scripts written by:
+# Kyle Brockman
+# Ashley Knowles
+#
 # The goal of this script is to create an environment of easy to use, easy to follow
 # choose-your-own adventure style selection process to arrive at the correct workflow/imaging process.
 # It is designed to be partially automated in that the script detects what it can from the machine it's
@@ -28,7 +32,8 @@ REIMAGE106="E7448872-0461-48FA-B1B7-ED3529B3CBE1"
 REIMAGE107="F32A97C2-CA31-492E-88C7-A7C012056531"
 REIMAGE108="21133048-7710-4277-8FB0-63747CF96918"
 #REIMAGE109=
-OLDMACHINE="3048820E-BBFB-4F53-BB3F-CA7EFFCC10BA"
+BACKUPANDERASE="3048820E-BBFB-4F53-BB3F-CA7EFFCC10BA"
+BACKUP="C3D683CE-CF13-4E96-834F-59D119E26358"
 
 
 # Array of machine models
@@ -53,8 +58,9 @@ CD="/Applications/Utilities/CocoaDialog.app/Contents/MacOS/CocoaDialog"
 # 1) Script checks for Encryption (If encrypted -> error)
 
 if [ "$ENCRYPTION" = "AES-XTS" ]; then
-  echo "Drive is encrypted"
+	echo "Drive is encrypted"
 	echo "RuntimeSelectWorkflow: $DISPLAYERROR"
+	exit 0
 else
 	echo "Drive is not encrypted"
 	DIR=`ls "$DS_INTERNAL_DRIVE/Users/" | grep -v Shared | grep -v .localized`
@@ -62,6 +68,7 @@ else
 	if [ "$TEST" != "" ]; then
 		echo "Home Directory is encrypted"
 		echo "RuntimeSelectWorkflow: $DISPLAYERROR"
+		exit 0
 	fi
 fi
 
@@ -78,9 +85,11 @@ if [ "$?" == "1" ]; then
 	if [ "$rv" == "1" ]; then
 		echo "User Selected to Import on New Machine"
 		echo "RuntimeSelectWorkflow: " $NEVERBOOTEDIMPORT " "
+		exit 0
 	elif [ "$rv" == "2" ]; then
 		echo "User Selected to Not Import on New Machine"
 		echo "RuntimeSelectWorkflow: " $NEVERBOOTED " "
+		exit 0
 	elif [ "$rv" == "3" ]; then
 		echo "User Selected to Cancel"
 		exit 0
@@ -92,7 +101,7 @@ fi
 # 3) Asks if user wants to rebuild the machine (Yes -> step 3a; No -> step 4)
 
 rv=`$CD yesno-msgbox --icon gear --text "Would you like to rebuild (reimage) the machine?" \
---informative-text "Inducts machine into JAMF."`
+--informative-text "Inducts machine into JSS."`
 if [ "$rv" == "1" ]; then
 echo "User Selected to Reimage"
 # 3a) Asks if user wants to migrate user data (Yes -> Reimage with Migration; No -> Reimage)
@@ -118,6 +127,7 @@ echo "User Selected to Reimage"
 			echo "RuntimeSelectWorkflow: " $REIMAGEMIGRATION108 " "
 		fi
 		done
+		exit 0
 		
 	elif [ "$rv" == "2" ]; then
 		echo "User Selected to Reimage Without Migrate"
@@ -139,6 +149,7 @@ echo "User Selected to Reimage"
 			echo "RuntimeSelectWorkflow: " $REIMAGE108 " "
 		fi
 		done
+		exit 0
 		
 	elif [ "$rv" == "3" ]; then
 		echo "User Selected to Cancel"
@@ -154,11 +165,22 @@ fi
 
 # 4) Asks if old machine needs to migrate to new machine (yes -> backup,prompt for backup check, dod wipe)
 
-rv=`$CD yesno-msgbox --icon hazard --text "Old Machine transfering to New Machine?" \
---informative-text "Selecting Yes will backup and then erase the drive."`
+rv=`$CD yesno-msgbox --icon hazard --text "Would you like to just backup the machine?" \
+--informative-text "Choose yes if migrating from old machine to new."`
 if [ "$rv" == "1" ]; then
-	echo "User Selected to Transfer from Old Machine"
-	echo "RuntimeSelectWorkflow: " $OLDMACHINE " "
+	rv=`$CD yesno-msgbox --icon hazard --text "Would you like to erase the drive after backup?" `
+	if [ "$rv" == "1" ]; then
+		echo "User Selected to Backup and Erase"
+		echo "RuntimeSelectWorkflow: " $BACKUPANDERASE " "
+		exit 0
+	elif [ "$rv" == "2" ]; then
+		echo "User Selected to Just Backup"
+		echo "RuntimeSelectWorkflow: " $BACKUP " "
+		exit 0
+	elif [ "$rv" == "3" ]; then
+		echo "User Selected to Cancel"
+		exit 0
+	fi
 elif [ "$rv" == "2" ]; then
 	echo "User Selected to Not Transfer"
 elif [ "$rv" == "3" ]; then
@@ -181,4 +203,5 @@ elif [ "$rv" == "2" ]; then
 	exit 0
 fi
 
+echo "I got to the end and did nothing."
 exit 0
